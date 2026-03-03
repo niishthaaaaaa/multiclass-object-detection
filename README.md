@@ -1,4 +1,19 @@
-﻿# Detects7
+## Project Context
+
+This repository is my maintained and continuously improving version of Detects7, originally developed as a collaborative team project.
+
+### My Contributions
+- Contributed to model training and evaluation
+- Worked on backend integration (FastAPI)
+- Assisted in frontend–backend connection
+- Participated in deployment and testing
+ 
+ 
+ 
+ 
+ 
+ 
+ # Detects7
 
 **Team:** Code Enforcers
 
