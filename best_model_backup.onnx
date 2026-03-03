@@ -1,0 +1,19 @@
+﻿from ultralytics import YOLO
+from .config import MODEL_PATH, DEVICE
+import threading
+
+_model = None
+_model_lock = threading.Lock()
+
+def get_model():
+    global _model
+    with _model_lock:
+        if _model is None:
+            print("Loading model:", MODEL_PATH, "device:", DEVICE)
+            try:
+                _model = YOLO(MODEL_PATH, task="detect")
+            except Exception as e:
+                # fallback: attempt load without task
+                _model = YOLO(MODEL_PATH)
+            print("Model loaded.")
+    return _model

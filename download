@@ -1,0 +1,58 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environments
+venv/
+env/
+/.venv
+space/
+
+# PyTorch / models
+# *.pt
+# *.pth
+# *.onnx
+# ml/**/weights/
+# models/
+
+# Data and caches
+data/
+cache/
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+
+# Node
+node_modules/
+dist/
+build/
+
+# Collected static
+*.egg-info/
+
+# Secrets
+.env
+*.pem
+node_modules/
+backend/env/
+frontend/node_modules/
+*.pyc
+__pycache__/
+.DS_Store

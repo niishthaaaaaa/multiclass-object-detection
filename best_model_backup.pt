@@ -1,0 +1,17 @@
+﻿import base64
+import io
+from PIL import Image
+import numpy as np
+import cv2
+
+def read_imagefile(file_bytes: bytes) -> Image.Image:
+    return Image.open(io.BytesIO(file_bytes)).convert("RGB")
+
+def pil_to_bgr_np(img_pil: Image.Image):
+    arr = np.array(img_pil)  # RGB
+    return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
+def encode_image_to_base64_bgr(img_bgr):
+    # expects BGR numpy image
+    _, buffer = cv2.imencode(".jpg", img_bgr)
+    return base64.b64encode(buffer).decode("utf-8")

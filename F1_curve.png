@@ -1,0 +1,160 @@
+# evaluate.py
+import yaml
+from pathlib import Path
+from ultralytics import YOLO
+import json
+import numpy as np
+from sklearn.metrics import confusion_matrix
+from tqdm import tqdm
+from PIL import Image
+
+def yolo_to_xyxy(box, w, h):
+    cls, x, y, bw, bh = box
+    cx = x * w
+    cy = y * h
+    bw = bw * w
+    bh = bh * h
+    return cls, [cx - bw/2, cy - bh/2, cx + bw/2, cy + bh/2]
+
+def load_boxes(txt):
+    boxes = []
+    with open(txt, "r") as f:
+        for line in f:
+            c, x, y, w, h = line.split()[:5]
+            boxes.append((int(c), float(x), float(y), float(w), float(h)))
+    return boxes
+
+def iou(a, b):
+    x1, y1, x2, y2 = a
+    X1, Y1, X2, Y2 = b
+    inter_x1 = max(x1, X1)
+    inter_y1 = max(y1, Y1)
+    inter_x2 = min(x2, X2)
+    inter_y2 = min(y2, Y2)
+    inter = max(0, inter_x2 - inter_x1) * max(0, inter_y2 - inter_y1)
+    if inter == 0:
+        return 0
+    area_a = max(0, (x2 - x1)) * max(0, (y2 - y1))
+    area_b = max(0, (X2 - X1)) * max(0, (Y2 - Y1))
+    return inter / (area_a + area_b - inter + 1e-6)
+
+if __name__ == "__main__":
+
+    this_dir = Path(__file__).parent
+
+    with open(this_dir / "yolo_params.yaml", "r") as f:
+        data = yaml.safe_load(f)
+
+    # -------------------------------
+    # Load latest trained model
+    # -------------------------------
+    # Directly load from exp12 folder
+    # model_path = this_dir / "yolo_runs" / "exp12" / "weights" / "best.pt"
+    model_path = Path(r"D:\detects7\ml\exp12\weights\best.pt")
+
+    if not model_path.exists():
+        raise FileNotFoundError(f"❌ best.pt not found at: {model_path}")
+
+    print(f"\n🔥 Using model: {model_path}\n")
+    model = YOLO(str(model_path))
+
+    # -------------------------------
+    # ultralytics val metrics
+    # -------------------------------
+    print("Running official Ultralytics evaluation...\n")
+    results = model.val(
+    data=str(this_dir / "yolo_params.yaml"),
+    split="test",
+    workers=0,
+    device=0,      
+    )
+
+    
+    clean = {
+        "mAP50": float(results.box.map50),        
+        "mAP50_95": float(results.box.map),       
+        "precision": float(results.box.mp),
+        "recall": float(results.box.mr),
+    }
+
+    print("\n===== 📊 CLEAN RESULTS =====")
+    for k, v in clean.items():
+        print(f"{k}: {v:.4f}")
+    print("===========================\n")
+
+    # -------------------------------
+    # Confusion Matrix
+    # -------------------------------
+    print("Building Confusion Matrix...\n")
+
+    test_img_dir = Path(data["test"]) / "images"
+    test_lbl_dir = Path(data["test"]) / "labels"
+    class_names = data["names"]
+
+    y_true = []
+    y_pred = []
+    bg = len(class_names) 
+
+    for img_path in tqdm(sorted(test_img_dir.glob("*"))):
+
+        if img_path.suffix.lower() not in [".jpg", ".png", ".jpeg"]:
+            continue
+
+        lbl_path = test_lbl_dir / img_path.with_suffix(".txt").name
+        if not lbl_path.exists():
+            continue
+
+        gt = load_boxes(lbl_path)
+        w, h = Image.open(img_path).size
+        gt_xyxy = [yolo_to_xyxy(b, w, h) for b in gt]
+
+        # Predictions
+        preds = model.predict(str(img_path), conf=0.25, verbose=False)[0]
+        pred_xyxy = [(int(b.cls), b.xyxy[0].tolist()) for b in preds.boxes]
+
+        used = set()
+
+        # Match GT to predictions
+        for cls_gt, gbox in gt_xyxy:
+            best_i = -1
+            best_iou = 0
+            best_cls = -1
+            for i, (cls_pred, pbox) in enumerate(pred_xyxy):
+                if i in used:
+                    continue
+                curr_iou = iou(gbox, pbox)
+                if curr_iou > best_iou:
+                    best_iou = curr_iou
+                    best_cls = cls_pred
+                    best_i = i
+
+            if best_iou >= 0.5:
+                y_true.append(cls_gt)
+                y_pred.append(best_cls)
+                used.add(best_i)
+            else:
+                y_true.append(cls_gt)
+                y_pred.append(bg) 
+
+        # Remaining predictions = FP
+        for i, (cls_pred, pbox) in enumerate(pred_xyxy):
+            if i not in used:
+                y_true.append(bg)
+                y_pred.append(cls_pred)
+
+    # Confusion matrix
+    labels = list(range(len(class_names))) + [bg]
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+
+    # Save everything
+    out = {
+        "summary": clean,
+        "confusion_matrix": cm.tolist(),
+        "class_labels": class_names + ["background"],
+    }
+
+    with open(this_dir / "evaluation_summary.json", "w") as f:
+        json.dump(out, f, indent=4)
+
+    print("\n📁 Saved evaluation_summary.json (mAP, PR, Confusion Matrix)\n")
+    print("Done.\n")
